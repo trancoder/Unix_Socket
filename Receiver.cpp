@@ -1,43 +1,28 @@
-#include <iostream>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
-#include <cstring>
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/interprocess/ipc/message_queue.hpp>
 
-int main() {
-    // Create a local socket
-    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        std::cerr << "Error creating socket\n";
-        return 1;
-    }
+void receiveStruct() {
+    // Receive the serialized data using Boost Interprocess Message Queue
+    boost::interprocess::message_queue mq(
+        boost::interprocess::open_or_create,
+        "my_message_queue",
+        100,
+        sizeof(char) * sizeof(MyStruct)
+    );
 
-    // Set up the address
-    struct sockaddr_un addr;
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, "/tmp/mysocket");  // Use the same socket file path as the server
+    std::string receivedData;
+    size_t receivedSize;
+    unsigned int priority;
+    mq.receive(&receivedData[0], receivedData.size(), receivedSize, priority);
 
-    // Connect to the server
-    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        std::cerr << "Error connecting to server\n";
-        close(sockfd);
-        return 1;
-    }
+    // Deserialize the received data into a MyStruct instance
+    MyStruct receivedStruct;
+    std::istringstream iss(receivedData);
+    boost::archive::binary_iarchive archive(iss);
+    archive >> receivedStruct;
 
-    // Receive data
-    char buffer[1024];
-    int bytes_received = recv(sockfd, buffer, sizeof(buffer), 0);
-    if (bytes_received == -1) {
-        std::cerr << "Error receiving data\n";
-        close(sockfd);
-        return 1;
-    }
-
-    // Print received data
-    std::cout << "Received: " << buffer << std::endl;
-
-    // Close socket
-    close(sockfd);
-
-    return 0;
+    // Use the received struct
+    std::cout << "Received ID: " << receivedStruct.id << std::endl;
+    std::cout << "Received Value: " << receivedStruct.value << std::endl;
+    std::cout << "Received Name: " << receivedStruct.name << std::endl;
 }
