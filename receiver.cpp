@@ -1,52 +1,37 @@
 #include <iostream>
-#include <atomic> // For atomic
-#include <boost/interprocess/shared_memory_object.hpp>
-#include <boost/interprocess/mapped_region.hpp>
+#include <boost/asio.hpp>
 
-struct MyStruct {
-    std::atomic<bool> newDataFlag;
-    int value1;
-    float value2;
-    char message[100];
+struct Message {
+    int id;
+    char content[1024]; // Fixed-size char array for content
 };
 
 int main() {
-    using namespace boost::interprocess;
     try {
-        // Open the shared memory object
-        shared_memory_object shm(open_only, "my_shared_memory", read_write); // Change read_only to read_write
+        boost::asio::io_context io_context;
 
-        // Map the shared memory into the process's address space with read_write permissions
-        mapped_region region(shm, read_write); // Change read_only to read_write
+        // UDP socket for receiving
+        boost::asio::ip::udp::socket socket(io_context, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 12345));
 
-        // Get a pointer to the mapped region
-        MyStruct* data = static_cast<MyStruct*>(region.get_address());
+        // Receive buffer
+        Message received_msg;
 
-        // Clear the shared memory data
-        std::memset(data, 0, sizeof(MyStruct));
+        // Endpoint for sender's response
+        boost::asio::ip::udp::endpoint sender_endpoint;
 
-        // Monitor the new data flag in shared memory
-        while (true) {
-            if (data->newDataFlag.load()) {
-                // New data flag is set, indicating presence of new data
-                std::cout << "New data detected in shared memory:\n";
-                std::cout << "Value 1: " << data->value1 << '\n';
-                std::cout << "Value 2: " << data->value2 << '\n';
-                std::cout << "Message: " << data->message << '\n';
+        // Receive the struct
+        size_t len = socket.receive_from(boost::asio::buffer(&received_msg, sizeof(received_msg)), sender_endpoint);
 
-                // Reset the new data flag to false for future use
-                data->newDataFlag.store(false);
-            }
-
-            // Add a sleep or wait mechanism to avoid busy waiting
-            // For example, std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-            // Add additional processing or logic as needed
+        // Check if received data matches the expected struct size
+        if (len == sizeof(received_msg)) {
+            std::cout << "Received message: ID = " << received_msg.id << ", Content = " << received_msg.content << std::endl;
+        } else {
+            std::cerr << "Received message with invalid size" << std::endl;
         }
-    } catch (const std::exception& e) {
-        std::cerr << "Exception: " << e.what() << '\n';
-        return 1;
+    } catch (std::exception& e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
     }
+
     return 0;
 }
 

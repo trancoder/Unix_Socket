@@ -1,44 +1,32 @@
 #include <iostream>
-#include <cstring>
-#include <atomic> // For atomic
-#include <boost/interprocess/shared_memory_object.hpp>
-#include <boost/interprocess/mapped_region.hpp>
+#include <boost/asio.hpp>
 
-struct MyStruct {
-    std::atomic<bool> newDataFlag;
-    int value1;
-    float value2;
-    char message[100];
+struct Message {
+    int id;
+    char content[1024]; // Fixed-size char array for content
 };
 
 int main() {
-    using namespace boost::interprocess;
+    try {
+        boost::asio::io_context io_context;
 
-    // Create or open the shared memory object
-    shared_memory_object shm(open_or_create, "my_shared_memory", read_write);
+        // UDP socket for sending
+        boost::asio::ip::udp::socket socket(io_context);
 
-    // Set the size of the shared memory segment
-    shm.truncate(sizeof(MyStruct));
+        // Set up the remote endpoint (receiver's endpoint)
+        boost::asio::ip::udp::endpoint remote_endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 12345);
 
-    // Map the shared memory into the process's address space
-    mapped_region region(shm, read_write);
+        // Struct to send
+        Message msg_to_send{42, "Hello from sender!"};
 
-    // Get a pointer to the mapped region
-    MyStruct* data = static_cast<MyStruct*>(region.get_address());
+        // Send the struct
+        socket.open(boost::asio::ip::udp::v4());
+        socket.send_to(boost::asio::buffer(&msg_to_send, sizeof(msg_to_send)), remote_endpoint);
 
-    // Clear the shared memory data
-    std::memset(data, 0, sizeof(MyStruct));
-
-    // Set the new data flag to false initially
-    data->newDataFlag.store(false);
-
-    // Generate new data
-    data->value1 = 42;
-    data->value2 = 3.14f;
-    std::strcpy(data->message, "Hello from the sender!");
-
-    // Set the new data flag to true to indicate presence of new data
-    data->newDataFlag.store(true);
+        std::cout << "Message sent successfully" << std::endl;
+    } catch (std::exception& e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+    }
 
     return 0;
 }
