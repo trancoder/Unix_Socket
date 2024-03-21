@@ -1,0 +1,43 @@
+#include <boost/asio.hpp>
+#include <iostream>
+
+using namespace boost::asio;
+
+void send_datagram(const std::string& host, int port, const std::vector<double>& data) {
+  if (data.size() != 6) {
+    std::cerr << "Error: Data must contain exactly 6 doubles." << std::endl;
+    return;
+  }
+
+  io_service io_service;
+  ip::udp::socket socket(io_service);
+
+  // Convert doubles to network byte order and pack into buffer
+  std::array<double, 6> network_data;
+  std::transform(data.begin(), data.end(), network_data.begin(),
+                 [](double val) { return boost::asio::detail::socket_ops::host_to_network(val); });
+  streambuf buffer;
+  std::ostream os(&buffer);
+  os << network_data;
+
+  ip::udp::endpoint endpoint(ip::address::from_string(host), port);
+
+  // Send UDP packet
+  try {
+    socket.send_to(buffer.data(), endpoint);
+    std::cout << "Sent UDP datagram with 6 doubles to " << host << ":" << port << std::endl;
+  } catch (const system_error& e) {
+    std::cerr << "Error sending datagram: " << e.what() << std::endl;
+  }
+}
+
+int main() {
+  // Replace with your desired host, port, and data
+  std::string host = "localhost";
+  int port = 60606;
+  std::vector<double> data = {-0.6353e6, 5.3302e6, 3.4332e6, -0.6851e6, 5.3253e6, 3.4312e6};
+
+  send_datagram(host, port, data);
+
+  return 0;
+}
